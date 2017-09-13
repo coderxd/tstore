@@ -109,7 +109,6 @@ public class DiskStore<T> extends TimestampStore<T>{
 					FileCache.close(dataBuffer);
 					dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,size+8);
 				}
-				//System.out.println(key+"\t"+offset+"\t"+dataBuffer.position()+"\t"+storeUnit.getTimestamp());
 				dataBuffer.putLong(storeUnit.getId());
 				dataBuffer.putLong(storeUnit.getTimestamp());
 				dataBuffer.put(this.serializerStore.encode(storeUnit.getData()));

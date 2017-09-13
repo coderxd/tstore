@@ -58,7 +58,6 @@ public class DiskReadCountTask implements Callable<Long> {
 				}
 			}
 			count++;
-			System.out.println("count:"+count);
 			mappedByteBuffer.position(mappedByteBuffer.position()+this.storeUnitSize);
 		}
 		return count;
