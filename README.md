@@ -1,8 +1,6 @@
 # tstore
 Timestamp Store
 
-适用范围
-
   适合存储历史记录的数据,查询是根据ID范围查找这种查询
 
 Terminal Command(暂时支持如下)：
