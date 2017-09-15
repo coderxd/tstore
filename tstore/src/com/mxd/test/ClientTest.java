@@ -10,7 +10,7 @@ public class ClientTest {
 	public static void main(String[] args) throws IOException {
 		TSClient client = new TSClient("127.0.0.1", 5124);
 		client.connect();
-		//创建一个名叫temp的Store，列为value类型是long
+		//创建一个名叫temp的Store，列为value类型是long，列name类型是String，长度20
 		client.create("{\"name\":\"temp\",\"columns\":[{\"name\":\"value\",\"type\":5},{\"name\":\"name\",\"type\":6,\"length\":20}]}");
 		long begin = System.currentTimeMillis();
 		//创建一百万条数据
