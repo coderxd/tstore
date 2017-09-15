@@ -24,10 +24,6 @@ public class StoreIndex {
 	
 	private String storeIndexPath;
 	
-	public static final String READONLY ="r";
-	
-	public static final String READ_WRITE ="rw";
-	
 	private SimpleDateFormat sdf = null;
 	
 	private Map<Long, Integer> relationMap = new HashMap<>();
@@ -36,20 +32,12 @@ public class StoreIndex {
 	
 	private ReentrantLock indexLock = new ReentrantLock();
 	
+	private StoreConfiguration configuration;
+	
 	public StoreIndex(StoreConfiguration storeConfiguration) {
 		super();
+		this.configuration = storeConfiguration;
 		this.storeIndexPath = storeConfiguration.getDiskPath();
-		String pattern = "yyyyMM";
-		switch(storeConfiguration.getTimeUnit()){
-			case 0: 
-				pattern = "yyyyMMddHH";
-				break;
-			case 1:
-				pattern = "yyyyMMdd";
-				break;
-		}
-		this.sdf = new SimpleDateFormat(pattern);
-		logger.info("index file use {} format",pattern);
 		this.init();
 	}
 	
@@ -67,7 +55,7 @@ public class StoreIndex {
 		this.maxId++;
 		try {
 			index = this.maxId;
-			RandomAccessFile raf = FileCache.getFile(READ_WRITE,this.storeIndexPath+"relation.rs");
+			RandomAccessFile raf = FileCache.getFile(FileCache.READ_WRITE,this.storeIndexPath+"relation.rs");
 			raf.seek(raf.length());
 			raf.writeLong(id);
 			raf.writeInt(index);
@@ -83,7 +71,20 @@ public class StoreIndex {
 	
 	private void init(){
 		try {
-			RandomAccessFile raf = FileCache.getFile(READONLY,this.storeIndexPath+"relation.rs");
+			String pattern = "yyyyMM";
+			switch(this.configuration.getTimeUnit()){
+				case 0: 
+					pattern = "yyyyMMddHH";
+					break;
+				case 1:
+					pattern = "yyyyMMdd";
+					break;
+			}
+			this.sdf = new SimpleDateFormat(pattern);
+			logger.info("index file use {} format",pattern);
+			
+			//把id映射关系读入到内存中
+			RandomAccessFile raf = FileCache.getFile(FileCache.READONLY,this.storeIndexPath+"relation.rs");
 			long length = raf.length();
 			while(raf.getFilePointer()<length){
 				long id = raf.readLong();

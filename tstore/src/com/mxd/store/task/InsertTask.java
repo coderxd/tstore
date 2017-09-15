@@ -2,18 +2,18 @@ package com.mxd.store.task;
 
 import com.mxd.store.DefaultTimestampStore;
 import com.mxd.store.MemoryStore;
-import com.mxd.store.StoreUnit;
 import com.mxd.store.TimestampStore;
+import com.mxd.store.common.StoreUnit;
 
-public class InsertTask<T> implements Runnable{
+public class InsertTask implements Runnable{
 	
-	private DefaultTimestampStore<T> store;
+	private DefaultTimestampStore store;
 	
-	private MemoryStore<T> memoryStore;
+	private MemoryStore memoryStore;
 	
-	private StoreUnit<T> storeUnit;
+	private StoreUnit storeUnit;
 	
-	public InsertTask(DefaultTimestampStore<T> store, StoreUnit<T> storeUnit) {
+	public InsertTask(DefaultTimestampStore store, StoreUnit storeUnit) {
 		super();
 		this.store = store;
 		this.storeUnit = storeUnit;
@@ -22,7 +22,8 @@ public class InsertTask<T> implements Runnable{
 
 	@Override
 	public void run() {
-		while(TimestampStore.SaveStatus.OVERFLOW==this.memoryStore.insert(this.storeUnit)){
+		//当memoryStore数据满了的时候，将memoryStore写入diskStore
+		while(TimestampStore.SaveStatus.OVERFLOW==this.memoryStore.insert(this.storeUnit)){	
 			this.store.flush();
 			try {
 				Thread.sleep(500L);

@@ -12,15 +12,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import com.mxd.store.common.SerializeStore;
+import com.mxd.store.common.StoreResult;
+import com.mxd.store.common.StoreUnit;
 import com.mxd.store.io.FileCache;
 import com.mxd.store.task.DiskReadCountTask;
 import com.mxd.store.task.DiskReadTask;
 
-public class DiskStore<T> extends TimestampStore<T>{
+public class DiskStore extends TimestampStore{
 	
 	private static Logger logger = LoggerFactory.getLogger(DiskStore.class);
 	
@@ -28,7 +29,7 @@ public class DiskStore<T> extends TimestampStore<T>{
 	
 	private StoreConfiguration configuration;
 	
-	private SerializeStore<T> serializerStore;
+	private SerializeStore serializerStore;
 	
 	private int storeUnitSize;
 	
@@ -44,24 +45,33 @@ public class DiskStore<T> extends TimestampStore<T>{
 	
 	private ExecutorService threadPool;
 	
-	@SuppressWarnings("unchecked")
 	public DiskStore(StoreConfiguration configuration,StoreIndex storeIndex) {
 		super();
 		this.storeIndex = storeIndex;
 		this.configuration = configuration;
 		this.storeUnitSize = this.configuration.getStoreUnitSize();
 		this.buffsetObjectSize = this.configuration.getDiskUnitBufferSize();
-		this.serializerStore = (SerializeStore<T>) this.configuration.getSerializeStore();
 		this.threadPool = Executors.newFixedThreadPool(this.configuration.getReadDiskThreads());
 	}
 	
 	@Override
-	public SaveStatus insert(StoreUnit<T> storeUnit) {
+	public SaveStatus insert(StoreUnit storeUnit) {
 		return insert(storeUnit.getId(),Arrays.asList(storeUnit));
 	}
 	
 	@Override
-	public SaveStatus insert(long id,List<StoreUnit<T>> storeUnits) {
+	public SaveStatus insert(long id,List<StoreUnit> storeUnits) {
+		/**
+		 * 在文件中数据格式类似于这样（会根据id计算出一个int型的id,这个id自增,从0开始，保存在relations.ts中）
+		 * 索引文件：[偏移量(offset long),下一次写入位置(long),在数据文件中的个数]共20字节，找到这个索引位置就是映射后的id*20
+		 * 数据文件: 
+		 *		[id,timestamp,column1,column2,...,columnN,
+		 *		 id,timestamp,column1,column2,...,columnN,
+		 *		 ...,
+		 *		 id,timestamp,column1,column2,...,columnN,//这里的个数始终等于buffsetObjectSize个，不管有没有数据
+		 *		 下一缓冲区位置(long)	为0时就代表没有下一个缓冲区了
+		 *		]
+		 */
 		long index = this.storeIndex.getIndex(id);
 		try {
 			String lastKey = null;
@@ -71,8 +81,10 @@ public class DiskStore<T> extends TimestampStore<T>{
 			MappedByteBuffer dataBuffer = null;
 			int len = 0;
 			long offset = 0;
+			//计算本次写入总大小
 			int size =(this.storeHeadSize+this.storeUnitSize)*this.buffsetObjectSize;
-			for (StoreUnit<T> storeUnit : storeUnits) {
+			for (StoreUnit storeUnit : storeUnits) {
+				//根据timestamp计算出文件名
 				String key = this.storeIndex.getTimestampKey(storeUnit.getTimestamp());
 				if(!key.equals(lastKey)){
 					if(raf!=null){
@@ -81,11 +93,11 @@ public class DiskStore<T> extends TimestampStore<T>{
 						indexBuffer = null;
 						dataBuffer = null;
 					}
-					raf = this.storeIndex.getIndexFile(storeUnit.getTimestamp(), StoreIndex.READ_WRITE);
+					raf = this.storeIndex.getIndexFile(storeUnit.getTimestamp(), FileCache.READ_WRITE);
 					indexBuffer = FileCache.getMappedByteBuffer(raf, FileChannel.MapMode.READ_WRITE, index*20, 20);
 					indexBuffer.getLong();
 					offset = indexBuffer.getLong();
-					dataRaf = this.storeIndex.getDataFile(storeUnit.getTimestamp(), StoreIndex.READ_WRITE);
+					dataRaf = this.storeIndex.getDataFile(storeUnit.getTimestamp(), FileCache.READ_WRITE);
 					len = indexBuffer.getInt();
 					if(len==0){
 						offset = dataRaf.length();
@@ -102,19 +114,21 @@ public class DiskStore<T> extends TimestampStore<T>{
 					
 				}
 				lastKey = key;
-				if(dataBuffer.remaining()==8){
+				
+				//当目前可用空间就剩8字节时,代表该缓冲区已满
+				if(dataBuffer.remaining()==8){	
 					offset = dataRaf.length();
 					dataBuffer.putLong(offset);
-					dataRaf.setLength(offset+size+8);
+					dataRaf.setLength(offset+size+8);	//在文件尾部扩一个缓冲区
 					FileCache.close(dataBuffer);
 					dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,size+8);
 				}
-				dataBuffer.putLong(storeUnit.getId());
-				dataBuffer.putLong(storeUnit.getTimestamp());
-				dataBuffer.put(this.serializerStore.encode(storeUnit.getData()));
+				dataBuffer.putLong(storeUnit.getId());	//写入id
+				dataBuffer.putLong(storeUnit.getTimestamp());	//写入时间
+				dataBuffer.put(storeUnit.getData());	//写入columns
 				indexBuffer.position(8);
-				indexBuffer.putLong(dataBuffer.remaining()==8 ? offset-8:offset+dataBuffer.position());
-				indexBuffer.putInt(++len);
+				indexBuffer.putLong(dataBuffer.remaining()==8 ? offset-8:offset+dataBuffer.position());//写入下一位置
+				indexBuffer.putInt(++len);	//个数+1
 			}
 			if(indexBuffer!=null){
 				FileCache.close(indexBuffer);
@@ -128,7 +142,12 @@ public class DiskStore<T> extends TimestampStore<T>{
 		}
 		return SaveStatus.SUCCESS;
 	}
-	
+	/**
+	 * 根据开始和结束时间计算应该在哪些文件中
+	 * @param minTimestamp
+	 * @param maxTimestamp
+	 * @return
+	 */
 	private List<Long> getTimestampes(long minTimestamp,long maxTimestamp){
 		int[] fields = new int[]{Calendar.HOUR_OF_DAY,Calendar.DAY_OF_MONTH,Calendar.MONTH};
 		int field = fields[this.configuration.getTimeUnit()];
@@ -144,32 +163,35 @@ public class DiskStore<T> extends TimestampStore<T>{
 	}
 	
 	@Override
-	public StoreResult<T> find(long id, long minTimestamp, long maxTimestamp) {
+	public StoreResult find(long id, long minTimestamp, long maxTimestamp) {
 		long begin = System.currentTimeMillis();
+		
+		//找出所有可能存在的文件
 		List<Long> timestampes = this.getTimestampes(minTimestamp,maxTimestamp);
 		int index = this.storeIndex.getIndex(id);
-		List<StoreUnit<T>> resultList = new ArrayList<>(); 
-		List<FutureTask<StoreResult<T>>> tasks = new ArrayList<>();
+		List<StoreUnit> resultList = new ArrayList<>(); 
+		List<FutureTask<StoreResult>> tasks = new ArrayList<>();
+		//每个文件占一个线程去读
 		for (int i = 0,size = timestampes.size(); i < size; i++) {
 			long timestamp = timestampes.get(i);
-			DiskReadTask<T> diskReadTask = new DiskReadTask<T>(id, index, minTimestamp, maxTimestamp, timestamp, this.storeIndex, i>0&&i+1<size,this.storeUnitSize,this.buffsetObjectSize,this.serializerStore);
-			FutureTask<StoreResult<T>> task = new FutureTask<StoreResult<T>>(diskReadTask);
+			DiskReadTask diskReadTask = new DiskReadTask(id, index, minTimestamp, maxTimestamp, timestamp, this.storeIndex, i>0&&i+1<size,this.storeUnitSize,this.buffsetObjectSize,this.serializerStore);
+			FutureTask<StoreResult> task = new FutureTask<StoreResult>(diskReadTask);
 			this.threadPool.submit(task);
 			tasks.add(task);
 		}
-		for (FutureTask<StoreResult<T>> futureTask : tasks) {
+		for (FutureTask<StoreResult> futureTask : tasks) {
 			try {
-				StoreResult<T> taskResult = futureTask.get(this.configuration.getReadTimeout(), TimeUnit.MILLISECONDS);
+				StoreResult taskResult = futureTask.get(this.configuration.getReadTimeout(), TimeUnit.MILLISECONDS);
 				resultList.addAll(taskResult.getData());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			} 
 		}
-		return new StoreResult<>(resultList, (int)(System.currentTimeMillis()-begin));
+		return new StoreResult(resultList, (int)(System.currentTimeMillis()-begin));
 	}
 
 	@Override
-	public StoreResult<T> findCount(long id, long minTimestamp, long maxTimestamp) {
+	public StoreResult findCount(long id, long minTimestamp, long maxTimestamp) {
 		long begin = System.currentTimeMillis();
 		long count = 0;
 		List<Long> timestampes = this.getTimestampes(minTimestamp,maxTimestamp);
@@ -190,6 +212,16 @@ public class DiskStore<T> extends TimestampStore<T>{
 				throw new RuntimeException(e);
 			} 
 		}
-		return new StoreResult<>(count, (int)(System.currentTimeMillis()-begin));
+		return new StoreResult(count, (int)(System.currentTimeMillis()-begin));
+	}
+
+	@Override
+	public SerializeStore getSerializeStore() {
+		return this.configuration.getSerializeStore();
+	}
+
+	@Override
+	public SaveStatus insert(List<StoreUnit> storeUnits) {
+		throw new UnsupportedOperationException();
 	}
 }

@@ -1,18 +1,26 @@
 package com.mxd.store;
 
 import java.io.File;
+import java.io.Serializable;
 
-public class StoreConfiguration implements Cloneable{
+import com.mxd.store.common.SerializeStore;
+import com.mxd.store.common.Store;
+
+public class StoreConfiguration implements Cloneable,Serializable{
+	
+	private static final long serialVersionUID = 2179863293236756457L;
+
+	private Store store;
 	
 	/**
-	 * 内存最大占用,默认512M
+	 * memory.mts最大占用空间,默认64M
 	 */
-	private int memoryMaxSize = 512*1024*1024;
+	private int memoryMaxSize = 64*1024*1024;
 	
 	/**
 	 * 对象序列化方法
 	 */
-	private SerializeStore<?> serializeStore;
+	private SerializeStore serializeStore;
 	
 	/**
 	 * 单个存储对象最大大小
@@ -27,17 +35,17 @@ public class StoreConfiguration implements Cloneable{
 	/**
 	 * 读取最大线程数
 	 */
-	private int readThreads = 16;
+	private int readThreads = 8;
 	
 	/**
 	 * 插入最大线程数
 	 */
-	private int insertThreads = 16;
+	private int insertThreads = 8;
 	
 	/**
 	 * 读取硬盘最大线程数
 	 */
-	private int readDiskThreads = 32;
+	private int readDiskThreads = 16;
 	
 	/**
 	 * 读取超时时间
@@ -53,28 +61,14 @@ public class StoreConfiguration implements Cloneable{
 	 * 每个存储对象缓冲区大小（存储在硬盘中连续存放的缓冲个数，当缓冲区不够时，将在尾部扩充追加一个diskUnitBufferSize的缓冲区
 	 * 这个单位不是字节,是对象数目
 	 */
-	private int diskUnitBufferSize = 1024;
-
+	private int diskUnitBufferSize = 1000;
+	
 	public StoreConfiguration() {
 		super();
 	}
 
 	public int getMemoryMaxSize() {
 		return memoryMaxSize;
-	}
-
-	public StoreConfiguration setMemoryMaxSize(int memoryMaxSize) {
-		this.memoryMaxSize = memoryMaxSize;
-		return this;
-	}
-
-	public SerializeStore<?> getSerializeStore() {
-		return serializeStore;
-	}
-
-	public StoreConfiguration setSerializeStore(SerializeStore<?> serializeStore) {
-		this.serializeStore = serializeStore;
-		return this;
 	}
 
 	public String getDiskPath() {
@@ -93,14 +87,9 @@ public class StoreConfiguration implements Cloneable{
 	}
 
 	public int getStoreUnitSize() {
-		return storeUnitSize;
+		return this.store.getStoreUnitSize();
 	}
 
-	public StoreConfiguration setStoreUnitSize(int storeUnitSize) {
-		this.storeUnitSize = storeUnitSize;
-		return this;
-	}
-	
 	public int getReadThreads() {
 		return readThreads;
 	}
@@ -152,6 +141,19 @@ public class StoreConfiguration implements Cloneable{
 	public StoreConfiguration setTimeUnit(int timeUnit) {
 		this.timeUnit = timeUnit;
 		return this;
+	}
+	
+	public Store getStore() {
+		return store;
+	}
+	public StoreConfiguration setStore(Store store) {
+		this.store = store;
+		this.serializeStore = new SerializeStore(store);
+		return this;
+	}
+	
+	public SerializeStore getSerializeStore(){
+		return this.serializeStore;
 	}
 
 	@Override

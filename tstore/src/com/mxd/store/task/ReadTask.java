@@ -2,12 +2,12 @@ package com.mxd.store.task;
 
 import java.util.concurrent.Callable;
 
-import com.mxd.store.StoreResult;
 import com.mxd.store.TimestampStore;
+import com.mxd.store.common.StoreResult;
 
-public class ReadTask<T> implements Callable<StoreResult<T>>{
+public class ReadTask implements Callable<StoreResult>{
 	
-	protected TimestampStore<T> store;
+	protected TimestampStore store;
 	
 	protected long id;
 	
@@ -15,7 +15,7 @@ public class ReadTask<T> implements Callable<StoreResult<T>>{
 	
 	protected long maxTimestamp;
 	
-	public ReadTask(TimestampStore<T> store, long id, long minTimestamp, long maxTimestamp) {
+	public ReadTask(TimestampStore store, long id, long minTimestamp, long maxTimestamp) {
 		super();
 		this.store = store;
 		this.id = id;
@@ -24,7 +24,7 @@ public class ReadTask<T> implements Callable<StoreResult<T>>{
 	}
 
 	@Override
-	public StoreResult<T> call() throws Exception {
+	public StoreResult call() throws Exception {
 		return this.store.find(this.id, this.minTimestamp, this.maxTimestamp);
 	}	
 

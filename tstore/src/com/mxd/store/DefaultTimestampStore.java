@@ -9,21 +9,22 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import com.mxd.store.common.SerializeStore;
+import com.mxd.store.common.StoreResult;
+import com.mxd.store.common.StoreUnit;
 import com.mxd.store.task.InsertTask;
 import com.mxd.store.task.ReadCountTask;
 import com.mxd.store.task.ReadTask;
 
-public class DefaultTimestampStore<T> extends TimestampStore<T>{
+public class DefaultTimestampStore extends TimestampStore{
 	
 	private static Logger logger = LoggerFactory.getLogger(DefaultTimestampStore.class);
 	
-	private MemoryStore<T> memoryStore;
+	private MemoryStore memoryStore;
 	
-	private DiskStore<T> diskStore;
+	private DiskStore diskStore;
 	
 	private ExecutorService threadPool;
 	
@@ -33,7 +34,7 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 	
 	private ReentrantLock flushLock = new ReentrantLock();
 	
-	public DefaultTimestampStore(StoreConfiguration configuration,MemoryStore<T> memoryStore, DiskStore<T> diskStore) {
+	public DefaultTimestampStore(StoreConfiguration configuration,MemoryStore memoryStore, DiskStore diskStore) {
 		super();
 		this.memoryStore = memoryStore;
 		this.diskStore = diskStore;
@@ -42,7 +43,8 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 		this.configuration = configuration;
 	}
 	@Override
-	public SaveStatus insert(StoreUnit<T> storeUnit) {
+	public SaveStatus insert(StoreUnit storeUnit) {
+		//防止内存占用过高，导致GC频繁,CPU升高
 		while(insertThreadPool.getTaskCount() - insertThreadPool.getCompletedTaskCount() >100){
 			try {
 				Thread.sleep(50L);
@@ -50,38 +52,38 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 				e.printStackTrace();
 			}
 		}
-		this.insertThreadPool.submit(new InsertTask<T>(this,storeUnit));
+		this.insertThreadPool.submit(new InsertTask(this,storeUnit));
 		return SaveStatus.SUCCESS;
 	}
 
 	@Override
-	public SaveStatus insert(long id,List<StoreUnit<T>> storeUnits) {
-		for (StoreUnit<T> storeUnit : storeUnits) {
+	public SaveStatus insert(long id,List<StoreUnit> storeUnits) {
+		for (StoreUnit storeUnit : storeUnits) {
 			this.insert(storeUnit);
 		}
 		return SaveStatus.SUCCESS;
 	}
 
 	@Override
-	public StoreResult<T> find(long id, long minTimestamp, long maxTimestamp) {
+	public StoreResult find(long id, long minTimestamp, long maxTimestamp) {
 		long begin = System.currentTimeMillis();
-		FutureTask<StoreResult<T>> memoryTask = new FutureTask<StoreResult<T>>(new ReadTask<T>(this.memoryStore, id, minTimestamp, maxTimestamp));
-		FutureTask<StoreResult<T>> diskTask = new FutureTask<StoreResult<T>>(new ReadTask<T>(this.diskStore, id, minTimestamp, maxTimestamp));
+		FutureTask<StoreResult> memoryTask = new FutureTask<StoreResult>(new ReadTask(this.memoryStore, id, minTimestamp, maxTimestamp));
+		FutureTask<StoreResult> diskTask = new FutureTask<StoreResult>(new ReadTask(this.diskStore, id, minTimestamp, maxTimestamp));
 		this.threadPool.submit(diskTask);
 		this.threadPool.submit(memoryTask);
-		StoreResult<T> result = null;
+		StoreResult result = null;
 		try {
-			StoreResult<T> diskResult = diskTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
+			StoreResult diskResult = diskTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
 			if(logger.isDebugEnabled()){
 				logger.debug("read disk task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,diskResult.getSize(),diskResult.getConsuming());
 			}
-			StoreResult<T> memoryResult = memoryTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
+			StoreResult memoryResult = memoryTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
 			if(logger.isDebugEnabled()){
 				logger.debug("read memory task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,memoryResult.getSize(),memoryResult.getConsuming());
 			}
-			List<StoreUnit<T>> diskList = diskResult.getData();
+			List<StoreUnit> diskList = diskResult.getData();
 			diskList.addAll(memoryResult.getData());
-			result = new StoreResult<>(diskList, (int)(System.currentTimeMillis()-begin),true);
+			result = new StoreResult(diskList, (int)(System.currentTimeMillis()-begin),true);
 			logger.info("read task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,result.getSize(),result.getConsuming());
 		} catch (Exception e) {
 			logger.error("read error",e);
@@ -91,23 +93,23 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 	}
 	
 	@Override
-	public StoreResult<T> findCount(long id, long minTimestamp, long maxTimestamp) {
-		StoreResult<T> result;
+	public StoreResult findCount(long id, long minTimestamp, long maxTimestamp) {
+		StoreResult result;
 		long begin = System.currentTimeMillis();
-		FutureTask<StoreResult<T>> memoryTask = new FutureTask<StoreResult<T>>(new ReadCountTask<T>(this.memoryStore, id, minTimestamp, maxTimestamp));
-		FutureTask<StoreResult<T>> diskTask = new FutureTask<StoreResult<T>>(new ReadCountTask<T>(this.diskStore, id, minTimestamp, maxTimestamp));
+		FutureTask<StoreResult> memoryTask = new FutureTask<StoreResult>(new ReadCountTask(this.memoryStore, id, minTimestamp, maxTimestamp));
+		FutureTask<StoreResult> diskTask = new FutureTask<StoreResult>(new ReadCountTask(this.diskStore, id, minTimestamp, maxTimestamp));
 		this.threadPool.submit(diskTask);
 		this.threadPool.submit(memoryTask);
 		try {
-			StoreResult<T> diskResult = diskTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
+			StoreResult diskResult = diskTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
 			if(logger.isDebugEnabled()){
 				logger.debug("read count disk task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,diskResult.getSize(),diskResult.getConsuming());	
 			}
-			StoreResult<T> memoryResult = memoryTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
+			StoreResult memoryResult = memoryTask.get(this.configuration.getReadTimeout(),TimeUnit.MILLISECONDS);
 			if(logger.isDebugEnabled()){
-				logger.info("read count memoru task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,memoryResult.getSize(),memoryResult.getConsuming());	
+				logger.info("read count memory task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,memoryResult.getSize(),memoryResult.getConsuming());	
 			}
-			result = new StoreResult<>(diskResult.getSize() + memoryResult.getSize(), (int)(System.currentTimeMillis()-begin));
+			result = new StoreResult(diskResult.getSize() + memoryResult.getSize(), (int)(System.currentTimeMillis()-begin));
 			logger.info("read count task finish,query {},{}-{},result:{count:{},time:{}ms}",id,minTimestamp,maxTimestamp,result.getSize(),result.getConsuming());
 		} catch (Exception e) {
 			logger.error("read error",e);
@@ -116,11 +118,11 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 		return result;
 	}
 
-	public MemoryStore<T> getMemoryStore() {
+	public MemoryStore getMemoryStore() {
 		return memoryStore;
 	}
 	/**
-	 * 将内存数据持久化到硬盘
+	 * 将memoryStore中的数据写入diskStore中
 	 */
 	public void flush(){
 		flushLock.lock();
@@ -128,10 +130,10 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 			if(memoryStore.isOverflow()){
 				logger.info("ready flush");
 				long begin = System.currentTimeMillis();
-				Map<Long,List<StoreUnit<T>>> maps = this.memoryStore.findAll();
+				Map<Long,List<StoreUnit>> maps = this.memoryStore.findAll();
 				long size = 0;
-				for (Entry<Long, List<StoreUnit<T>>> entry : maps.entrySet()) {
-					List<StoreUnit<T>> list = entry.getValue();
+				for (Entry<Long, List<StoreUnit>> entry : maps.entrySet()) {
+					List<StoreUnit> list = entry.getValue();
 					long id = entry.getKey();
 					this.diskStore.insert(id,list);
 					size+=list.size();
@@ -144,6 +146,18 @@ public class DefaultTimestampStore<T> extends TimestampStore<T>{
 		} finally {
 			flushLock.unlock();
 		}
+	}
+	
+	@Override
+	public SerializeStore getSerializeStore() {
+		return this.configuration.getSerializeStore();
+	}
+	@Override
+	public SaveStatus insert(List<StoreUnit> storeUnits) {
+		for (StoreUnit unit : storeUnits) {
+			this.insert(unit);
+		}
+		return SaveStatus.SUCCESS;
 	}
 
 }

@@ -8,20 +8,33 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import sun.nio.ch.FileChannelImpl;
 
-
+/**
+ * 缓存已打开的文件,默认180秒后关闭，每次get操作,都将重置关闭时间
+ * @author mxd
+ *
+ */
 public class FileCache {
 	
-	private final static Map<String,FileItem> fileMap = new HashMap<>();
+	private static Logger logger = LoggerFactory.getLogger(FileCache.class);
+	
+	private final static Map<String,FileItem> fileMap = new ConcurrentHashMap<>();
 	
 	private static Method unmapMethod;
 	
-	private static final long defaultExpireTime = 180000;
+	private static final long defaultExpireTime = 1800000;
+	
+	public static final String READONLY ="r";
+	
+	public static final String READ_WRITE ="rw";
 	
 	static {
 		 new Thread(new FileExpriedThread()).start();
@@ -29,7 +42,6 @@ public class FileCache {
 			unmapMethod = FileChannelImpl.class.getDeclaredMethod("unmap",MappedByteBuffer.class);
 			unmapMethod.setAccessible(true);
 		} catch (Exception e) {
-			//e.printStackTrace();
 		}
 	}
 	
@@ -46,11 +58,11 @@ public class FileCache {
 				item = fileMap.get(key);
 				item.expriedTime = System.currentTimeMillis()+defaultExpireTime;
 				raf = item.raf;
-				buffer = raf.getChannel().map("r".equals(mode) ? FileChannel.MapMode.READ_ONLY:FileChannel.MapMode.READ_WRITE, position, size);
+				buffer = raf.getChannel().map("r".equals(READONLY) ? FileChannel.MapMode.READ_ONLY:FileChannel.MapMode.READ_WRITE, position, size);
 			}else{
 				raf = new RandomAccessFile(file, mode);
 				item = new FileItem(raf, System.currentTimeMillis()+defaultExpireTime);
-				buffer = raf.getChannel().map("r".equals(mode) ? FileChannel.MapMode.READ_ONLY:FileChannel.MapMode.READ_WRITE, position, size);
+				buffer = raf.getChannel().map("r".equals(READONLY) ? FileChannel.MapMode.READ_ONLY:FileChannel.MapMode.READ_WRITE, position, size);
 				fileMap.put(key, item);
 			}
 			item.addBuffer(buffer);
@@ -172,6 +184,7 @@ public class FileCache {
 						for (String key : fileMap.keySet()) {
 							FileItem item = fileMap.get(key);
 							if(item.getExpriedTime()< timestamp){
+								logger.info("close expried file:"+key);
 								close(item.raf,item.buffers);
 								fileMap.remove(key);
 							}
