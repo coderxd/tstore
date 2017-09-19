@@ -5,12 +5,17 @@ public class RequestCode {
 	/**
 	 * 创建Store
 	 */
-	public static final int REQUEST_CREATE = 0x101;
+	public static final int REQUEST_STORE_LIST = 0x100;
+	
+	/**
+	 * 创建Store
+	 */
+	public static final int REQUEST_STORE_CREATE = 0x101;
 	
 	/**
 	 * 删除Store
 	 */
-	public static final int REQUEST_DELETE = 0x102;
+	public static final int REQUEST_STORE_DELETE = 0x102;
 	
 	
 	/**

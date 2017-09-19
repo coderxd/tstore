@@ -9,6 +9,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +22,50 @@ public class TimestampStoreEngine {
 	
 	private static Map<String,TimestampStore> stories = new ConcurrentHashMap<>();
 	
-	private static boolean isLoad = false;
-	
 	private static StoreConfiguration defaultConfiguration = null;
+	
+	static{
+		init();
+	}
+	
+	private static void init(){
+		String diskPath = getDefaultStoreConfiguration().getDiskPath();
+		File[] dirs = new File(diskPath).listFiles(new FileFilter() {
+			@Override
+			public boolean accept(File pathname) {
+				return pathname.isDirectory();	
+			}
+		});
+		if(dirs!=null){
+			for (File dir : dirs) {
+				FileInputStream fis = null;
+				ObjectInputStream ois = null;
+				try {
+					fis = new FileInputStream(dir.getAbsolutePath()+File.separator+dir.getName()+".cts");
+					ois = new ObjectInputStream(fis);
+					StoreConfiguration configuration = (StoreConfiguration) ois.readObject();
+					stories.put(dir.getName(), create(configuration));
+				} catch (Exception e) {
+					logger.error("load store ["+dir.getName()+"] error",e);
+				} finally{
+					if(ois!=null){
+						try {
+							ois.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+					if(fis!=null){
+						try {
+							fis.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+				}
+			}
+		}
+	}
 	
 	/**
 	 * 获取一个store
@@ -31,46 +73,6 @@ public class TimestampStoreEngine {
 	 * @return
 	 */
 	public static TimestampStore get(String storeName){
-		if(isLoad==false){
-			String diskPath = getDefaultStoreConfiguration().getDiskPath();
-			File[] dirs = new File(diskPath).listFiles(new FileFilter() {
-				@Override
-				public boolean accept(File pathname) {
-					return pathname.isDirectory();	
-				}
-			});
-			if(dirs!=null){
-				for (File dir : dirs) {
-					FileInputStream fis = null;
-					ObjectInputStream ois = null;
-					try {
-						fis = new FileInputStream(dir.getAbsolutePath()+File.separator+dir.getName()+".cts");
-						ois = new ObjectInputStream(fis);
-						StoreConfiguration configuration = (StoreConfiguration) ois.readObject();
-						stories.put(dir.getName(), create(configuration));
-					} catch (Exception e) {
-						logger.error("load store ["+dir.getName()+"] error",e);
-					} finally{
-						if(ois!=null){
-							try {
-								ois.close();
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-						if(fis!=null){
-							try {
-								fis.close();
-							} catch (IOException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
-						}
-					}
-				}
-			}
-			isLoad = true;
-		}
 		return stories.get(storeName);
 	}
 	
@@ -178,5 +180,12 @@ public class TimestampStoreEngine {
 		MemoryStore memoryStore = new MemoryStore(storeConfiguration);
 		
 		return new DefaultTimestampStore(storeConfiguration,memoryStore,diskStore);
+	}
+	/**
+	 * 获取Store列表
+	 * @return
+	 */
+	public static Set<String> list(){
+		return stories.keySet();
 	}
 }

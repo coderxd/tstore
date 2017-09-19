@@ -18,11 +18,16 @@ public class ResponseCode {
 	 */
 	public static final int ERROR_UNKNOW_COMMAND = 0x02;
 	
+	/**
+	 * Store列表
+	 */
+	public static final int RESPONSE_STORE_LIST = 0x100;
+	
 	
 	/**
 	 * 创建Store失败,已存在
 	 */
-	public static final int RESPONSE_CREATE_STORE_EXISTS = 0x101;
+	public static final int ERROR_CREATE_STORE_EXISTS = 0x101;
 	
 	/**
 	 * 命令解析失败

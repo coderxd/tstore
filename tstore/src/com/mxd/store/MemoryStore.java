@@ -3,7 +3,6 @@ package com.mxd.store;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,7 +30,7 @@ public class MemoryStore extends TimestampStore{
 	 */
 	private int storeHeadSize = 16;	//（id 8字节）+（时间戳 8字节）
 	
-	private MappedByteBuffer buffer;
+	private ByteBuffer buffer;
 	
 	private StoreConfiguration configuration;
 	
@@ -195,7 +194,7 @@ public class MemoryStore extends TimestampStore{
 		try {
 			if(position>4){
 				RandomAccessFile raf = FileCache.getFile(FileCache.READONLY, this.configuration.getDiskPath()+"memory.mts");
-				MappedByteBuffer result =  FileCache.getMappedByteBuffer(raf,FileChannel.MapMode.READ_ONLY, 0, position);
+				ByteBuffer result =  FileCache.getMappedByteBuffer(raf,FileChannel.MapMode.READ_ONLY, 0, position);
 				result.position(4);
 				return result;
 			}

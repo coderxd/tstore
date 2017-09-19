@@ -1,9 +1,11 @@
 package com.mxd.store.io;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
@@ -28,6 +30,8 @@ public class FileCache {
 	
 	private final static Map<String,FileItem> fileMap = new ConcurrentHashMap<>();
 	
+	private final static Map<String,File> newFileMap = new ConcurrentHashMap<>();
+	
 	private static Method unmapMethod;
 	
 	private static final long defaultExpireTime = 1800000;
@@ -45,7 +49,15 @@ public class FileCache {
 		}
 	}
 	
-	public static MappedByteBuffer getMappedByteBuffer(RandomAccessFile raf,MapMode mode,long position,long size) throws IOException{
+	public static ByteBuffer getMappedByteBuffer(RandomAccessFile raf,MapMode mode,long position,int size) throws IOException{
+		if(mode==FileChannel.MapMode.READ_ONLY){
+			byte[] bytes = new byte[size];
+			long filePointer = raf.getFilePointer();
+			raf.seek(position);
+			raf.read(bytes, 0, size);
+			raf.seek(filePointer);
+			return ByteBuffer.wrap(bytes);
+		}
 		return raf.getChannel().map(mode, position, size);
 	}
 	public static MappedByteBuffer getMappedByteBuffer(String file,String mode,long position,long size) throws IOException{
@@ -81,6 +93,19 @@ public class FileCache {
 		}
 	}
 	
+	public static RandomAccessFile getNewFile(String mode,String file) throws FileNotFoundException{
+		String key = file;
+		File f = null;
+		synchronized (newFileMap) {
+			f = newFileMap.get(key);
+			if(f==null){
+				f = new File(file);
+				newFileMap.put(key,f);
+			}
+		}
+		return new RandomAccessFile(file, mode);
+	}
+	
 	public static RandomAccessFile getFile(String mode,String file) throws FileNotFoundException{
 		String key = mode+":"+file;
 		RandomAccessFile raf = null;
@@ -98,8 +123,11 @@ public class FileCache {
 		return raf;
 	}
 	
-	public static void close(MappedByteBuffer buffer){
-		unmap(buffer);
+	public static void close(ByteBuffer buffer){
+		if(buffer instanceof MappedByteBuffer){
+			unmap((MappedByteBuffer) buffer);	
+		}
+		
 	}
 	
 	private static void close(RandomAccessFile raf,List<MappedByteBuffer> buffers){

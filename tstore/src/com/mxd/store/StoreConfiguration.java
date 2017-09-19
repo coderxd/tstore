@@ -55,13 +55,13 @@ public class StoreConfiguration implements Cloneable,Serializable{
 	/**
 	 * 存储周期，0小时，1天，2月，
 	 */
-	private int timeUnit = 1;
+	private int timeUnit = 2;
 	
 	/**
 	 * 每个存储对象缓冲区大小（存储在硬盘中连续存放的缓冲个数，当缓冲区不够时，将在尾部扩充追加一个diskUnitBufferSize的缓冲区
 	 * 这个单位不是字节,是对象数目
 	 */
-	private int diskUnitBufferSize = 1000;
+	private int diskUnitBufferSize = 30000;
 	
 	public StoreConfiguration() {
 		super();

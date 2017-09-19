@@ -8,5 +8,4 @@ public class StartTSTerminal {
 	public static void main(String[] args) throws IOException {
 		TSTerminal.main(args);
 	}
-
 }

@@ -1,54 +1,22 @@
 package com.mxd.store.net.common;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.GZIPInputStream;
+
 public class StoreMessageDecoder {
 	
-	public static long[] responseGet(byte[] data,List<Map<String,Object>> result){
-		ByteArrayInputStream bais = null;
-		GZIPInputStream gis = null;
-		ByteArrayOutputStream baos = null;
-		try {
-			bais = new ByteArrayInputStream(data);
-			baos = new ByteArrayOutputStream();
-			gis = new GZIPInputStream(bais);
-			int count;
-			byte buffer[] = new byte[1024];
-			while ((count = gis.read(buffer, 0, 1024)) != -1) {
-				baos.write(buffer, 0, count);
-			}
-			data = baos.toByteArray();
-		} catch (IOException e1) {
-			return null;
-		} finally{
-			if(gis!=null){
-				try {
-					gis.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-			if(baos!=null){
-				try {
-					baos.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
+	public static long[] responseGet(byte[] data,List<Map<String,Object>> result,List<String> columns){
 		long[] ret = new long[2];
 		ByteBuffer buffer = ByteBuffer.wrap(data);
 		int columnSize = buffer.getInt();
 		String[] header = new String[columnSize];
 		int[] types = new int[columnSize];
 		int[] columnLength = new int[columnSize];
+		columns.add("id");
+		columns.add("timestamp");
 		for (int i = 0; i < columnSize; i++) {
 			int size = buffer.getInt();
 			byte[] bytes = new byte[size];
@@ -57,6 +25,7 @@ public class StoreMessageDecoder {
 				header[i] = new String(bytes,"ISO-8859-1");
 				types[i] = buffer.getInt();
 				columnLength[i] = buffer.getInt();
+				columns.add(header[i]);
 			} catch (UnsupportedEncodingException e) {
 				return null;
 			}
@@ -65,7 +34,7 @@ public class StoreMessageDecoder {
 		ret[0] = len;
 		ret[1] = buffer.getInt();
 		for (int i = 0; i <len; i++) {
-			Map<String,Object> map = new LinkedHashMap<>();
+			Map<String,Object> map = new HashMap<>();
 			map.put("id", buffer.getLong());
 			map.put("timestamp", buffer.getLong());
 			for (int j = 0; j < columnSize; j++) {

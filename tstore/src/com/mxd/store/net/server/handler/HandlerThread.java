@@ -51,14 +51,15 @@ public class HandlerThread implements Runnable{
 			selectionKey.selector().wakeup();
 		} catch (Exception e) {
 			this.selectionKey.cancel();
-			logger.warn("handler error",e);
+			//logger.warn("handler error",e);
 		}
 	}
 	private void handlerMessage(StoreMessage message,SocketChannel channel){
 		ServerStoreMessageHandler handler = null;
 		switch (message.getRequestCode()) {
-			case REQUEST_CREATE:
-			case REQUEST_DELETE:
+			case REQUEST_STORE_CREATE:
+			case REQUEST_STORE_DELETE:
+			case REQUEST_STORE_LIST:
 				handler = new ServerStoreHandler();
 				break;
 			case REQUEST_GET:
@@ -78,6 +79,8 @@ public class HandlerThread implements Runnable{
 				handler.onMessageReceived(channel, message);
 			} catch (Exception e) {
 				logger.error(handler.getClass() + " error",e);
+			} finally{
+				handler = null;
 			}
 		}
 	}

@@ -1,7 +1,7 @@
 package com.mxd.store;
 
 import java.io.RandomAccessFile;
-import java.nio.MappedByteBuffer;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,8 +28,6 @@ public class DiskStore extends TimestampStore{
 	private StoreIndex storeIndex;
 	
 	private StoreConfiguration configuration;
-	
-	private SerializeStore serializerStore;
 	
 	private int storeUnitSize;
 	
@@ -76,12 +74,12 @@ public class DiskStore extends TimestampStore{
 		try {
 			String lastKey = null;
 			RandomAccessFile raf = null;
-			MappedByteBuffer indexBuffer = null;
+			ByteBuffer indexBuffer = null;
 			RandomAccessFile dataRaf = null;
-			MappedByteBuffer dataBuffer = null;
+			ByteBuffer dataBuffer = null;
 			int len = 0;
 			long offset = 0;
-			//计算本次写入总大小
+			//计算一个缓冲区的大小
 			int size =(this.storeHeadSize+this.storeUnitSize)*this.buffsetObjectSize;
 			for (StoreUnit storeUnit : storeUnits) {
 				//根据timestamp计算出文件名
@@ -114,7 +112,6 @@ public class DiskStore extends TimestampStore{
 					
 				}
 				lastKey = key;
-				
 				//当目前可用空间就剩8字节时,代表该缓冲区已满
 				if(dataBuffer.remaining()==8){	
 					offset = dataRaf.length();
@@ -127,7 +124,7 @@ public class DiskStore extends TimestampStore{
 				dataBuffer.putLong(storeUnit.getTimestamp());	//写入时间
 				dataBuffer.put(storeUnit.getData());	//写入columns
 				indexBuffer.position(8);
-				indexBuffer.putLong(dataBuffer.remaining()==8 ? offset-8:offset+dataBuffer.position());//写入下一位置
+				indexBuffer.putLong(offset+dataBuffer.position());//写入下一位置
 				indexBuffer.putInt(++len);	//个数+1
 			}
 			if(indexBuffer!=null){
@@ -168,13 +165,12 @@ public class DiskStore extends TimestampStore{
 		
 		//找出所有可能存在的文件
 		List<Long> timestampes = this.getTimestampes(minTimestamp,maxTimestamp);
-		int index = this.storeIndex.getIndex(id);
 		List<StoreUnit> resultList = new ArrayList<>(); 
 		List<FutureTask<StoreResult>> tasks = new ArrayList<>();
 		//每个文件占一个线程去读
 		for (int i = 0,size = timestampes.size(); i < size; i++) {
 			long timestamp = timestampes.get(i);
-			DiskReadTask diskReadTask = new DiskReadTask(id, index, minTimestamp, maxTimestamp, timestamp, this.storeIndex, i>0&&i+1<size,this.storeUnitSize,this.buffsetObjectSize,this.serializerStore);
+			DiskReadTask diskReadTask = new DiskReadTask(id,minTimestamp, maxTimestamp, timestamp, this.storeIndex, i>0&&i+1<size,this.storeUnitSize,this.buffsetObjectSize);
 			FutureTask<StoreResult> task = new FutureTask<StoreResult>(diskReadTask);
 			this.threadPool.submit(task);
 			tasks.add(task);
@@ -195,11 +191,10 @@ public class DiskStore extends TimestampStore{
 		long begin = System.currentTimeMillis();
 		long count = 0;
 		List<Long> timestampes = this.getTimestampes(minTimestamp,maxTimestamp);
-		int index = this.storeIndex.getIndex(id);
 		List<FutureTask<Long>> tasks = new ArrayList<>();
 		for (int i = 0,size = timestampes.size(); i < size; i++) {
 			long timestamp = timestampes.get(i);
-			DiskReadCountTask diskReadCountTask = new DiskReadCountTask(id, index, minTimestamp, maxTimestamp, timestamp, this.storeIndex, i>0&&i+1<size,this.storeUnitSize,this.buffsetObjectSize);
+			DiskReadCountTask diskReadCountTask = new DiskReadCountTask(id, minTimestamp, maxTimestamp, timestamp, this.storeIndex, i>0&&i+1<size,this.storeUnitSize,this.buffsetObjectSize);
 			FutureTask<Long> task = new FutureTask<Long>(diskReadCountTask);
 			this.threadPool.submit(task);
 			tasks.add(task);

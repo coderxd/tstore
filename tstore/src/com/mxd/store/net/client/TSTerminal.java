@@ -3,13 +3,15 @@ package com.mxd.store.net.client;
 import static com.mxd.store.net.common.RequestCode.*;
 import static com.mxd.store.net.common.ResponseCode.*;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.Set;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mxd.store.net.common.DataCompress;
 import com.mxd.store.net.common.StoreMessage;
 import com.mxd.store.net.common.StoreMessageDecoder;
 
@@ -31,12 +33,17 @@ public class TSTerminal {
 			}else{
 				message = parseParams(command, null);
 			}
-			if(message!=null){
+			if("help".equals(command)){
+				printHelpMessage();
+			}else if(message!=null){
 				long begin = System.currentTimeMillis();
 				try {
 					StoreMessage storeMessage = client.send(message);
 					printResponseMessage(storeMessage,System.currentTimeMillis()-begin);
-				} catch (Exception e) {
+				} catch(SocketTimeoutException e){
+					System.out.println("read time out");
+					System.exit(0);
+				}catch (Exception e) {
 					System.out.println("read error:"+e.getMessage());
 				}
 			}else{
@@ -69,12 +76,22 @@ public class TSTerminal {
 		return new TSClient(host, port, connectTimeout, readTimeout);
 	}
 	
-	private static void printResponseMessage(StoreMessage message,long readTime){
+	private static void printHelpMessage(){
+		System.out.println("Support Commands:");
+		System.out.println("\tget storeName id minTimestamp maxTimestamp -- get data from store with id and timestamp bounds");
+		System.out.println("\tgetcount storeName id minTimestamp maxTimestamp -- get data count from store with id and timestamp bounds");
+		System.out.println("\tput storeName id timestamp column1 column2 ... columnN -- insert data into store");
+		System.out.println("\tcreate {name:storeName,columns:[{name:\"column1Name\",type:columnType},{name:\"column2Name\",type:columnType}]} -- create store");
+		System.out.println("\tlist -- store list");
+		System.out.println("\thelp -- print help mmessage");
+	}
+	
+	private static void printResponseMessage(StoreMessage message,long readTime) throws UnsupportedEncodingException{
 		switch (message.getRequestCode()) {
 		case RESPONSE_SUCCESS:
 			System.out.println("ok read cost time:"+readTime);
 			break;
-		case RESPONSE_CREATE_STORE_EXISTS:
+		case ERROR_CREATE_STORE_EXISTS:
 			System.out.println("ERROR("+message.getRequestCode()+"):create store error,the store already exists");
 			break;
 		case RESPONSE_WRONG_FORMAT:
@@ -90,33 +107,55 @@ public class TSTerminal {
 		case RESPONSE_GET:
 			printGetMessage(message,readTime);
 			break;
+		case RESPONSE_STORE_LIST:
+			printListMessage(message,readTime);
+			break;
 		default:
 			System.out.println("WARN("+message.getRequestCode()+"):unknow response message");
 			break;
 		}
 	}
 	
+	private static void printListMessage(StoreMessage message,long readTime) throws UnsupportedEncodingException{
+		ByteBuffer buffer = ByteBuffer.wrap(message.getData());
+		int storeCount = buffer.getInt();
+		if(storeCount>0){
+			for (int i = 0; i < storeCount; i++) {
+				int size = buffer.getInt();
+				byte[] nameBytes = new byte[size];
+				buffer.get(nameBytes);
+				System.out.print(new String(nameBytes,"ISO-8859-1"));
+				if(i+1<storeCount){
+					System.out.print(",");
+				}
+			}
+			System.out.println();
+		}else{
+			System.out.println("no stories");
+		}
+	}
+	
 	private static void printGetMessage(StoreMessage message,long readTime){
 		try {
 			List<Map<String,Object>> list = new ArrayList<>();
-			long[] result = StoreMessageDecoder.responseGet(message.getData(),list);
+			List<String> columns = new ArrayList<>();
+			long[] result = StoreMessageDecoder.responseGet(DataCompress.uncompress(message.getData()),list,columns);
 			if(result==null){
 				System.out.println("parser result error");
 			}else{
 				boolean printHeader = true;
 				int i = 0;
 				for (Map<String, Object> map : list) {
-					Set<String> keys = map.keySet();
 					if(printHeader){
 						System.out.print(" ");
-						for(String key:keys){
+						for(String key:columns){
 							System.out.print("\t"+key);
 						}
 						printHeader = false;
 						System.out.println();
 					}
 					System.out.print(++i);
-					for (String key : keys) {
+					for (String key : columns) {
 						System.out.print("\t"+map.get(key));
 					}
 					System.out.println();
@@ -128,15 +167,17 @@ public class TSTerminal {
 			System.out.println("parser result error");
 		}
 	}
-	private static StoreMessage parseParams(String command,String body){
+	private static StoreMessage parseParams(String command,String body) throws IOException{
 		if("get".equals(command)){
 			return parseGetCommand(body);
 		}else if("getcount".equals(command)){
 			return parseGetCountCommand(body);
 		}else if("put".equals(command)){
-			return parsePutCommand(body);
+			return new StoreMessage(REQUEST_PUT,new ObjectMapper().writeValueAsBytes(body.split(" ")));
 		}else if("create".equals(command)){
-			return parseCreateCommand(body);
+			return new StoreMessage(REQUEST_STORE_CREATE,body);
+		}else if("list".equals(command)){
+			return new StoreMessage(REQUEST_STORE_LIST);
 		}
 		return null;
 	}
@@ -174,18 +215,6 @@ public class TSTerminal {
 			return null;
 		}
 	}
-	private static StoreMessage parsePutCommand(String body){
-		try {
-			return new StoreMessage(REQUEST_PUT,new ObjectMapper().writeValueAsBytes(body.split(" ")));
-		} catch (Exception e) {
-			return null;
-		}
-	}
-	private static StoreMessage parseCreateCommand(String body){
-		try {
-			return new StoreMessage(REQUEST_CREATE,body);
-		} catch (Exception e) {
-			return null;
-		}
-	}
+	
+	
 }

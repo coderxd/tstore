@@ -1,7 +1,10 @@
 package com.mxd.store;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -108,18 +111,81 @@ public class StoreIndex {
 		return fileName;
 	}
 	
+	public HistoryIndex getHistoryIndex(long timestamp,long id){
+		try {
+			int index = this.getIndex(id);
+			RandomAccessFile raf = getIndexFile(timestamp,FileCache.READONLY);
+			long indexOffset = index*20;
+			if(raf.length() >=indexOffset+20){
+				ByteBuffer buffer = FileCache.getMappedByteBuffer(raf, FileChannel.MapMode.READ_ONLY, indexOffset, 20);
+				return new HistoryIndex(buffer.getLong(), buffer.getLong(), buffer.getInt());
+			}
+		} catch (IOException e) {
+			
+		}
+		return null;
+	}
+	
 	public RandomAccessFile getIndexFile(long timestamp,String mode) throws FileNotFoundException{
 		String fileName = null;
 		synchronized (this.sdf) {
 			fileName = sdf.format(new Date(timestamp*1000));
 		}
-		return FileCache.getFile(mode, this.storeIndexPath+fileName+".tsi");
+		return getIndexFile(fileName, mode);
 	}
+	public RandomAccessFile getIndexFile(String key,String mode) throws FileNotFoundException{
+		return FileCache.getFile(mode, this.storeIndexPath+key+".tsi");
+	}
+	
 	public RandomAccessFile getDataFile(long timestamp,String mode) throws FileNotFoundException{
 		String fileName = null;
 		synchronized (this.sdf) {
 			fileName = sdf.format(new Date(timestamp*1000));
 		}
-		return FileCache.getFile(mode, this.storeIndexPath+fileName+".ts");
+		return getDataFile(fileName, mode);
+	}
+	
+	public RandomAccessFile getDataFile(String key,String mode) throws FileNotFoundException{
+		return FileCache.getNewFile(mode, this.storeIndexPath+key+".ts");
+	}
+	
+	public static class HistoryIndex{
+		
+		private long offset;
+		
+		private long nextPosition;
+		
+		private int len;
+		
+		public HistoryIndex(long offset, long nextPosition, int len) {
+			super();
+			this.offset = offset;
+			this.nextPosition = nextPosition;
+			this.len = len;
+		}
+
+		public long getOffset() {
+			return offset;
+		}
+
+		public void setOffset(long offset) {
+			this.offset = offset;
+		}
+
+		public long getNextPosition() {
+			return nextPosition;
+		}
+
+		public void setNextPosition(long nextPosition) {
+			this.nextPosition = nextPosition;
+		}
+
+		public int getLen() {
+			return len;
+		}
+
+		public void setLen(int len) {
+			this.len = len;
+		}
 	}
 }

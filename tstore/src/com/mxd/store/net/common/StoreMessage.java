@@ -51,6 +51,9 @@ public class StoreMessage implements Serializable{
 		return buffer;
 		
 	}
+	public void setData(byte[] data) {
+		this.data = data;
+	}
 	@Override
 	public String toString() {
 		return "StoreMessage [requestCode=" + requestCode +", data=" + Arrays.toString(data) + "]";

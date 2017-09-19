@@ -2,7 +2,9 @@ package com.mxd.store.net.client;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -14,6 +16,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mxd.store.net.common.DataCompress;
 import com.mxd.store.net.common.StoreMessage;
 import static com.mxd.store.net.common.RequestCode.*;
 
@@ -32,6 +35,8 @@ public class TSClient {
 	private SocketChannel socketChannel;
 	
 	private Selector selector;
+	
+	private boolean isClosed = false;
 	
 	public TSClient(String host, int port,int connectTimeout,int readTimeout) {
 		super();
@@ -57,6 +62,9 @@ public class TSClient {
 		this.socketChannel.socket().setReuseAddress(true);
 		this.socketChannel.socket().setTcpNoDelay(true);
 		this.socketChannel.socket().setReceiveBufferSize(1024);
+		this.socketChannel.setOption(StandardSocketOptions.SO_RCVBUF,1024);
+		this.socketChannel.setOption(StandardSocketOptions.SO_REUSEADDR,true);
+		this.socketChannel.setOption(StandardSocketOptions.TCP_NODELAY,true);
 		while(!this.socketChannel.isConnected()){
 			if(System.currentTimeMillis() - begin > this.connectTimeout){
 				throw new SocketTimeoutException();
@@ -72,7 +80,7 @@ public class TSClient {
 	 * @throws IOException
 	 */
 	public StoreMessage create(String json) throws IOException{
-		return send(new StoreMessage(REQUEST_CREATE,json));
+		return send(new StoreMessage(REQUEST_STORE_CREATE,json));
 	}
 	
 	/**
@@ -88,7 +96,12 @@ public class TSClient {
 		if(storeName==null){
 			throw new NullPointerException("storeName is null");
 		}
-		return send(new StoreMessage(REQUEST_GET,String.format("[\"%s\",%d,%d,%d]", storeName,id,minTimestamp,maxTimestamp)));
+		StoreMessage message = send(new StoreMessage(REQUEST_GET,String.format("[\"%s\",%d,%d,%d]", storeName,id,minTimestamp,maxTimestamp)));
+		byte[] data = message.getData();
+		if(data!=null&&data.length>0){
+			message.setData(DataCompress.uncompress(data));
+		}
+		return message;
 	}
 	
 	/**
@@ -148,12 +161,15 @@ public class TSClient {
 		return send(new StoreMessage(REQUEST_PUTS,new ObjectMapper().writeValueAsString(map)));
 	}
 	protected StoreMessage send(StoreMessage message) throws IOException{
-		if(this.socketChannel.isConnected()){
-			ByteBuffer buffer = message.getBuffer();
-			this.socketChannel.write(buffer);
-			return get();
+		if(!this.socketChannel.isConnected()){
+			throw new SocketException("socket not connected");
 		}
-		return null;
+		if(this.isClosed){
+			throw new SocketException("socket is closed");
+		}
+		ByteBuffer buffer = message.getBuffer();
+		this.socketChannel.write(buffer);
+		return get();
 	}
 	
 	private ByteBuffer readBuffer(int len,long begin) throws IOException{
@@ -164,7 +180,7 @@ public class TSClient {
 			if(temp==-1){
 				throw new IOException("read len is -1");
 			}
-			if(System.currentTimeMillis() - begin > this.readTimeout){
+			if(this.readTimeout >=0&&System.currentTimeMillis() - begin > this.readTimeout){
 				throw new SocketTimeoutException("read timeout");
 			}
 			readLen+=temp;
@@ -175,7 +191,7 @@ public class TSClient {
 	
 	public synchronized StoreMessage get() throws IOException{
 		long begin = System.currentTimeMillis();
-		while(System.currentTimeMillis() - begin < this.readTimeout){
+		while(this.readTimeout <=0||System.currentTimeMillis() - begin < this.readTimeout){
 			try {
 				ByteBuffer lenBuffer = readBuffer(4,begin);
 				int dataLength = lenBuffer.getInt();
@@ -185,10 +201,11 @@ public class TSClient {
 						int requestCode = dataBuffer.getInt();
 						byte[] data  = new byte[dataBuffer.remaining()];
 						dataBuffer.get(data);
+						dataBuffer = null;
 						return new StoreMessage(requestCode, data);
 					}
 				}else{
-					Thread.sleep(5L);
+					Thread.sleep(20L);
 					continue;
 				}
 			} catch (IOException e) {
@@ -203,6 +220,7 @@ public class TSClient {
 	}
 	public void close(){
 		try {
+			this.isClosed = true;
 			this.socketChannel.close();
 			this.selector.close();
 		} catch (IOException e) {

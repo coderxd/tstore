@@ -1,14 +1,10 @@
 package com.mxd.store.common;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.zip.GZIPOutputStream;
 import com.mxd.store.common.Column.Type;
 
 public class SerializeStore implements Serializable{
@@ -192,39 +188,6 @@ public class SerializeStore implements Serializable{
 		resultBuffer.put(header);
 		resultBuffer.put(body);
 		byte[] bytes = resultBuffer.array();
-		ByteArrayInputStream bais = null; 
-		ByteArrayOutputStream baos = null;
-		GZIPOutputStream gos = null;
-		try {
-			bais = new ByteArrayInputStream(bytes);
-			baos = new ByteArrayOutputStream();
-			gos = new GZIPOutputStream(baos);
-			int count;  
-		    byte data[] = new byte[1024];  
-		    while ((count = bais.read(data, 0, 1024)) != -1) {  
-		        gos.write(data, 0, count);  
-		    }
-		    gos.finish();
-		    gos.flush();
-		    return baos.toByteArray();
-		} catch (IOException e) {
-			
-		} finally{
-			if(gos!=null){
-				try {
-					gos.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-			if(bais!=null){
-				try {
-					bais.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-		return new byte[0];
+		return bytes;
 	}
 }

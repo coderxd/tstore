@@ -9,6 +9,7 @@ import com.mxd.store.TimestampStore;
 import com.mxd.store.TimestampStoreEngine;
 import com.mxd.store.common.FormatUtils;
 import com.mxd.store.common.StoreResult;
+import com.mxd.store.net.common.DataCompress;
 import com.mxd.store.net.common.StoreMessage;
 
 /**
@@ -45,8 +46,9 @@ public class GetHandler extends ServerStoreMessageHandler{
 			StoreResult result = timestampStore.find(id, minTimestamp, maxTimestamp);
 			//将结果按一定的格式传输给客户端
 			byte[] data = timestampStore.getSerializeStore().encode(result);
-			super.write(channel,new StoreMessage(RESPONSE_GET,data));
-			
+			super.write(channel,new StoreMessage(RESPONSE_GET,DataCompress.compress(data)));
+			data = null;
+			result = null;
 			return;
 		}else{
 			StoreResult result = timestampStore.findCount(id, minTimestamp, maxTimestamp);

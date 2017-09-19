@@ -159,5 +159,7 @@ public class DefaultTimestampStore extends TimestampStore{
 		}
 		return SaveStatus.SUCCESS;
 	}
-
+	public DiskStore getDiskStore() {
+		return diskStore;
+	}
 }
