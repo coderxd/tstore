@@ -76,7 +76,8 @@ public class DiskStore extends TimestampStore{
 			RandomAccessFile raf = null;
 			ByteBuffer indexBuffer = null;
 			RandomAccessFile dataRaf = null;
-			ByteBuffer dataBuffer = null;
+			//ByteBuffer dataBuffer = null;
+			ByteBuffer cacheBuffer = null;
 			int len = 0;
 			long offset = 0;
 			//计算一个缓冲区的大小
@@ -86,10 +87,17 @@ public class DiskStore extends TimestampStore{
 				String key = this.storeIndex.getTimestampKey(storeUnit.getTimestamp());
 				if(!key.equals(lastKey)){
 					if(raf!=null){
+						//dataBuffer.put(cacheBuffer.array());
+						dataRaf.write(cacheBuffer.array());
+						indexBuffer.position(8);
+						indexBuffer.putLong(offset+cacheBuffer.position());//写入下一位置
+						indexBuffer.putInt(len);	//个数+1
 						FileCache.close(indexBuffer);
-						FileCache.close(dataBuffer);
+						//FileCache.close(dataBuffer);
+						raf.close();
+						dataRaf.close();
 						indexBuffer = null;
-						dataBuffer = null;
+						//dataBuffer = null;
 					}
 					raf = this.storeIndex.getIndexFile(storeUnit.getTimestamp(), FileCache.READ_WRITE);
 					indexBuffer = FileCache.getMappedByteBuffer(raf, FileChannel.MapMode.READ_WRITE, index*20, 20);
@@ -103,35 +111,47 @@ public class DiskStore extends TimestampStore{
 						indexBuffer.putLong(offset);
 						indexBuffer.putLong(offset);
 						dataRaf.setLength(offset+size+8);
-						dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,size+8);
+						//dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,size+8);
+						dataRaf.seek(offset);
+						cacheBuffer = ByteBuffer.allocate(size+8);
 					}else{
 						int remainSize = len % this.buffsetObjectSize;
 						remainSize = remainSize ==0 ? 0 : (this.buffsetObjectSize - remainSize)*(this.storeHeadSize+this.storeUnitSize);
-						dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,remainSize+8);
+						//dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,remainSize+8);
+						cacheBuffer = ByteBuffer.allocate(remainSize+8);
+						dataRaf.seek(offset);
 					}
 					
 				}
 				lastKey = key;
 				//当目前可用空间就剩8字节时,代表该缓冲区已满
-				if(dataBuffer.remaining()==8){	
+				if(cacheBuffer.remaining()==8){	
 					offset = dataRaf.length();
-					dataBuffer.putLong(offset);
+					cacheBuffer.putLong(offset);
 					dataRaf.setLength(offset+size+8);	//在文件尾部扩一个缓冲区
-					FileCache.close(dataBuffer);
-					dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,size+8);
+					//dataBuffer.put(cacheBuffer.array());
+					dataRaf.write(cacheBuffer.array());
+					//FileCache.close(dataBuffer);
+					//dataBuffer = FileCache.getMappedByteBuffer(dataRaf, FileChannel.MapMode.READ_WRITE, offset,size+8);
+					cacheBuffer = ByteBuffer.allocate(size+8);
+					dataRaf.seek(offset);
 				}
-				dataBuffer.putLong(storeUnit.getId());	//写入id
-				dataBuffer.putLong(storeUnit.getTimestamp());	//写入时间
-				dataBuffer.put(storeUnit.getData());	//写入columns
-				indexBuffer.position(8);
-				indexBuffer.putLong(offset+dataBuffer.position());//写入下一位置
-				indexBuffer.putInt(++len);	//个数+1
+				cacheBuffer.putLong(storeUnit.getId());	//写入id
+				cacheBuffer.putLong(storeUnit.getTimestamp());	//写入时间
+				cacheBuffer.put(storeUnit.getData());	//写入columns
+				++len;
 			}
 			if(indexBuffer!=null){
+				dataRaf.write(cacheBuffer.array());
+				//dataBuffer.put(cacheBuffer.array());
+				indexBuffer.position(8);
+				indexBuffer.putLong(offset+cacheBuffer.position());//写入下一位置
+				indexBuffer.putInt(len);	//个数+1
 				FileCache.close(indexBuffer);
-				FileCache.close(dataBuffer);
+				//FileCache.close(dataBuffer);
+				dataRaf.close();
 				indexBuffer = null;
-				dataBuffer = null;
+				//dataBuffer = null;
 			}
 		} catch (Exception e) {
 			logger.error("disk insert error,",e);

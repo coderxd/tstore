@@ -34,6 +34,7 @@ public class ServerStoreHandler extends ServerStoreMessageHandler{
 					super.write(channel,new StoreMessage(RESPONSE_SUCCESS));
 				}
 			} catch (Exception e) {
+				e.printStackTrace();
 				super.write(channel,new StoreMessage(RESPONSE_WRONG_FORMAT));
 			}
 			

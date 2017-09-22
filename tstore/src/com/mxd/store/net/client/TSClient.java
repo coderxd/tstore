@@ -38,6 +38,8 @@ public class TSClient {
 	
 	private boolean isClosed = false;
 	
+	private boolean connect = false;
+	
 	public TSClient(String host, int port,int connectTimeout,int readTimeout) {
 		super();
 		this.host = host;
@@ -71,6 +73,9 @@ public class TSClient {
 			}
 			this.socketChannel.finishConnect();
 		}
+		this.isClosed = false;
+		this.connect = true;
+		
 	}
 	
 	/**
@@ -223,8 +228,16 @@ public class TSClient {
 			this.isClosed = true;
 			this.socketChannel.close();
 			this.selector.close();
+			this.connect = false;
 		} catch (IOException e) {
 			logger.error("close error",e);
+			this.connect = false;
+		} finally{
+			this.socketChannel = null;
+			this.selector = null;
 		}
+	}
+	public boolean isConnect() {
+		return socketChannel!=null&&connect;
 	}
 }

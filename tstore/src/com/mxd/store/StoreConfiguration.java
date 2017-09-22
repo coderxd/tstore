@@ -13,9 +13,9 @@ public class StoreConfiguration implements Cloneable,Serializable{
 	private Store store;
 	
 	/**
-	 * memory.mts最大占用空间,默认64M
+	 * memory.mts最大占用空间,默认16M
 	 */
-	private int memoryMaxSize = 64*1024*1024;
+	private int memoryMaxSize = 16*1024*1024;
 	
 	/**
 	 * 对象序列化方法
@@ -61,7 +61,7 @@ public class StoreConfiguration implements Cloneable,Serializable{
 	 * 每个存储对象缓冲区大小（存储在硬盘中连续存放的缓冲个数，当缓冲区不够时，将在尾部扩充追加一个diskUnitBufferSize的缓冲区
 	 * 这个单位不是字节,是对象数目
 	 */
-	private int diskUnitBufferSize = 30000;
+	private int diskUnitBufferSize = 10000;
 	
 	public StoreConfiguration() {
 		super();

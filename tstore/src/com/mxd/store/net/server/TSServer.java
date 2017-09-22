@@ -1,5 +1,6 @@
 package com.mxd.store.net.server;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
@@ -11,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.mxd.store.net.server.handler.HandlerThread;
@@ -84,9 +86,16 @@ public class TSServer {
 					}
 				} catch (InterruptedException e) {
 					executor.shutdownNow();
-				} 
+				}
 			}
 			
 		}
+	}
+	public static void main(String[] args) {
+		String configDir = System.getProperty("user.dir");
+		if(new File(configDir+"/conf/log4j.properties").exists()){
+			PropertyConfigurator.configure(configDir+"/conf/log4j.properties");
+		}
+		new TSServer().start(5124, 16);
 	}
 }

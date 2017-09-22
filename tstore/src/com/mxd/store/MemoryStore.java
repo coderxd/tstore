@@ -208,8 +208,10 @@ public class MemoryStore extends TimestampStore{
 		
 	}
 	
-	public void clear(){
+	public void readyFlush(){
 		this.lock.lock();
+	}
+	public void flushFinally(){
 		try {
 			this.buffer.clear();
 			this.buffer.position(0);
@@ -217,9 +219,7 @@ public class MemoryStore extends TimestampStore{
 		} finally{
 			this.lock.unlock();	
 		}
-		
 	}
-
 
 	@Override
 	public SerializeStore getSerializeStore() {

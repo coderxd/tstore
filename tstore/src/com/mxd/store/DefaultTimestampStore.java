@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import com.mxd.store.common.SerializeStore;
 import com.mxd.store.common.StoreResult;
 import com.mxd.store.common.StoreUnit;
+import com.mxd.store.task.FlushTimerTask;
 import com.mxd.store.task.InsertTask;
 import com.mxd.store.task.ReadCountTask;
 import com.mxd.store.task.ReadTask;
@@ -34,6 +35,8 @@ public class DefaultTimestampStore extends TimestampStore{
 	
 	private ReentrantLock flushLock = new ReentrantLock();
 	
+	private FlushTimerTask flushTimerTask;
+	
 	public DefaultTimestampStore(StoreConfiguration configuration,MemoryStore memoryStore, DiskStore diskStore) {
 		super();
 		this.memoryStore = memoryStore;
@@ -41,6 +44,8 @@ public class DefaultTimestampStore extends TimestampStore{
 		this.threadPool = Executors.newFixedThreadPool(configuration.getReadThreads());
 		this.insertThreadPool = (ThreadPoolExecutor) Executors.newFixedThreadPool(configuration.getInsertThreads());
 		this.configuration = configuration;
+		this.flushTimerTask = new FlushTimerTask(this);
+		new Thread(this.flushTimerTask).start();
 	}
 	@Override
 	public SaveStatus insert(StoreUnit storeUnit) {
@@ -127,23 +132,22 @@ public class DefaultTimestampStore extends TimestampStore{
 	public void flush(){
 		flushLock.lock();
 		try {
-			if(memoryStore.isOverflow()){
-				logger.info("ready flush");
-				long begin = System.currentTimeMillis();
-				Map<Long,List<StoreUnit>> maps = this.memoryStore.findAll();
-				long size = 0;
-				for (Entry<Long, List<StoreUnit>> entry : maps.entrySet()) {
-					List<StoreUnit> list = entry.getValue();
-					long id = entry.getKey();
-					this.diskStore.insert(id,list);
-					size+=list.size();
-				}
-				this.memoryStore.clear();
-				logger.info("flush finish,count:{},time:{}",size,System.currentTimeMillis()-begin);
+			this.memoryStore.readyFlush();
+			logger.info("ready flush");
+			long begin = System.currentTimeMillis();
+			Map<Long,List<StoreUnit>> maps = this.memoryStore.findAll();
+			long size = 0;
+			for (Entry<Long, List<StoreUnit>> entry : maps.entrySet()) {
+				List<StoreUnit> list = entry.getValue();
+				long id = entry.getKey();
+				this.diskStore.insert(id,list);
+				size+=list.size();
 			}
+			logger.info("flush finish,count:{},time:{}",size,System.currentTimeMillis()-begin);
 		} catch (Exception e) {
 			logger.error("flush error",e);
 		} finally {
+			this.memoryStore.flushFinally();
 			flushLock.unlock();
 		}
 	}
