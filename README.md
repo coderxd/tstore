@@ -11,25 +11,25 @@
 **支持命令：**
 - **create**  创建Store
 
-`create {name:"storeName",columns:[{name:"columnName",type:columnType(int类型，具体参照Column类的常量),length:长度(该属性只支持String类型)}]}`
+&emsp;`create {name:"storeName",columns:[{name:"columnName",type:columnType(int类型，具体参照Column类的常量),length:长度(该属性只支持String类型)}]}`
 - **put**  插入数据
 
-`put storeName id timestamp column1 column2 ... columnN`
+&emsp;`put storeName id timestamp column1 column2 ... columnN`
 - **puts**  批量插入
 
-`只支持在API中调用`
+&emsp;`只支持在API中调用`
 - **get**  查找数据
 
-`get storeName id minTimestamp maxTimestamp`
+&emsp;`get storeName id minTimestamp maxTimestamp`
 
 - **getcount** 查找数据（数量）
 
-`getcount storeName id minTimestamp maxTimestamp`
+&emsp;`getcount storeName id minTimestamp maxTimestamp`
 - **list** 查看Store列表
 
-`list`
+&emsp;`list`
 - **help** 打印帮助说明
 
-`help`
+&emsp;`help`
 
 
