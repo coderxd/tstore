@@ -12,3 +12,7 @@ Terminal Command(暂时支持如下)：
   get：查找数据 get storeName id minTimestamp maxTimestamp
   
   getcount：查找数据（数量）getcount storeName id minTimestamp maxTimestamp
+  
+  list：查看Store列表
+  
+  help：打印帮助说明
